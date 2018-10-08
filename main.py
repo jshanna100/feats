@@ -1,6 +1,8 @@
 import sys
+import os
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QFont
+from importlib import import_module
 
 class MainApp(QWidget):
     
@@ -41,6 +43,7 @@ class MainApp(QWidget):
         self.butt_dict["Stimuli"].setEnabled(True)
         self.butt_dict["M/EEG"].clicked.connect(self.meeg_click)
         self.butt_dict["M/EEG"].setEnabled(True)
+        self.butt_dict["Definitions"].clicked.connect(self.def_click)
         
         self.show()
 
@@ -58,6 +61,10 @@ class MainApp(QWidget):
     def meeg_click(self):
         self.meeg_filename, _ = QFileDialog.getOpenFileName()
         self.check_files()
+        
+    def def_click(self):
+        self.def_filename, _ = QFileDialog.getOpenFileName()
+        defs = importlib.import_module(self.def_filename)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
