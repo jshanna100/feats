@@ -92,12 +92,12 @@ class DragBars:
         "key_press_event", self.on_key)
 
 
-net_dir = "/home/jeff/deepeeg/all_b400_z28_res/"
-netGxFile = net_dir+"netGx_epoch_0_1.pth"
+net_dir = "/home/jeff/deepeeg/all_b256_z16_res/"
+netGxFile = net_dir+"netGx_epoch_0_2.pth"
 vecfile = net_dir+"93_A_hand_5ms_ica-raw.fif_Z"
 deriv_plot = True
 
-z_cuda = torch.FloatTensor(1,28,1,1).cuda()
+z_cuda = torch.FloatTensor(1,16,1,1).cuda()
 netGx = models.Generator()
 netGx.load_state_dict(torch.load(netGxFile))
 netGx = network_to_half(netGx)
@@ -109,7 +109,7 @@ plt.sca(axes[0])
 plt.axis("off")
 fig.canvas.draw()
 backgrounds = [fig.canvas.copy_from_bbox(ax.bbox) for ax in axes]
-z = np.random.normal(loc=0,scale=1,size=28)
+z = np.random.normal(loc=0,scale=1,size=16)
 plt.sca(axes[1])
 barplot = plt.bar(np.array(range(len(z))),z,color="blue")
 plt.ylim((-3,3))
@@ -121,6 +121,6 @@ if deriv_plot:
 else:
     bilder = Bilder(barplot.patches,z_cuda,netGx,axes[0],backgrounds[0],deriv_imshow=None)
 bilder.draw()
-db = DragBars(barplot.patches,[str(x) for x in list(range(28))],
+db = DragBars(barplot.patches,[str(x) for x in list(range(16))],
 bilder,axes[1],backgrounds[1])
 db.connect()
