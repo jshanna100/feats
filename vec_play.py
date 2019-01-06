@@ -92,13 +92,14 @@ class DragBars:
         "key_press_event", self.on_key)
 
 
-net_dir = "/home/jeff/deepeeg/all_b256_z16_res/"
-netGxFile = net_dir+"netGx_epoch_0_2.pth"
+z_num = 8
+net_dir = "/home/jeff/deepeeg/all_b256_z{}_res/".format(z_num)
+netGxFile = net_dir+"netGx_epoch_0_1.pth"
 vecfile = net_dir+"93_A_hand_5ms_ica-raw.fif_Z"
 deriv_plot = True
 
-z_cuda = torch.FloatTensor(1,16,1,1).cuda()
-netGx = models.Generator()
+z_cuda = torch.FloatTensor(1,z_num,1,1).cuda()
+netGx = models.Generator(chan_num=z_num)
 netGx.load_state_dict(torch.load(netGxFile))
 netGx = network_to_half(netGx)
 netGx.cuda()
@@ -109,7 +110,7 @@ plt.sca(axes[0])
 plt.axis("off")
 fig.canvas.draw()
 backgrounds = [fig.canvas.copy_from_bbox(ax.bbox) for ax in axes]
-z = np.random.normal(loc=0,scale=1,size=16)
+z = np.random.normal(loc=0,scale=1,size=z_num)
 plt.sca(axes[1])
 barplot = plt.bar(np.array(range(len(z))),z,color="blue")
 plt.ylim((-3,3))
