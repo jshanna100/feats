@@ -4,10 +4,18 @@ from deepeeg import models
 import numpy as np
 import pickle
 from deepeeg.DataManage import EEGVolumeDataSet as EEGVDS
-from apex.fp16_utils import *
 
 import matplotlib.pyplot as plt
 plt.ion()
+
+def rowcol_nums(ratio,number):
+    # find the row column ratio for a given number of subplots
+    a = np.array([[1,1],[1,-1]])
+    b = np.array(((np.log(number),np.log(ratio))))
+    x = np.exp(np.linalg.solve(a,b))
+    r,c = np.ceil(x[0]).astype(int),np.ceil(x[1]).astype(int)
+    return r,c
+
 
 def array_from_bild(batch,pix_pos):
     arr = np.empty((len(pix_pos),batch.shape[0]))
@@ -15,30 +23,15 @@ def array_from_bild(batch,pix_pos):
         arr[p_idx,:] = batch[:,0,p[0],p[1]].numpy()
     return arr
 
+def norm_vec(vec,dim=1):
+    return vec/np.linalg.norm(vec,axis=dim)
+
 class Bilder:
-    def __init__(self,rects,z_cuda,netGx,axis,background,deriv_plot=False,source_plot=False):
+    def __init__(self,rects,z_cuda,netGx,axis,background):
         self.rects = rects
         self.z_cuda = z_cuda
         self.netGx = netGx
         self.axis = axis
-        self.deriv_plot = deriv_plot
-        if self.deriv_plot:
-            self.deriv_imshow = plt.imshow(np.zeros((64,64)),vmin=0,vmax=.05)
-        self.source_plot = source_plot
-        if self.source_plot:
-            rawfile = "/home/jeff/deepeeg/proc/93_A_5ms_hand_ica-raw.fif"
-            self.raw = mne.io.Raw(rawfile,preload=True).pick_types(eeg=True)
-            self.raw = mne.set_eeg_reference(self.raw,projection=True)[0]
-            self.pix_pos = np.load("/home/jeff/deepeeg/proc/pix_pos.npy")
-            self.std_thresh = np.load("/home/jeff/deepeeg/proc/std_thresh.npy")
-            self.mu = np.load("/home/jeff/deepeeg/proc/mu.npy")
-            self.raw.crop(tmax=0)
-            self.raw[:] = np.zeros(self.raw.get_data().shape)
-            fwd = mne.read_forward_solution("/home/jeff/deepeeg/proc/deepeeg_generic-fwd.fif")
-            cov = mne.read_cov("/home/jeff/deepeeg/proc/deepeeg_generic-cov.fif")
-            self.inv = mne.minimum_norm.make_inverse_operator(self.raw.info,fwd,cov,depth=0.1)
-            self.stc = mne.minimum_norm.apply_inverse_raw(self.raw,self.inv,1)
-            self.stc_plot = self.stc.plot(subject="deepeeg_generic",subjects_dir="/home/jeff/freesurfer/subjects", hemi="split")
         x_hat = netGx(z_cuda).detach()
         plt.sca(self.axis)
         self.imshow = plt.imshow(x_hat[0,0,].cpu().numpy().astype(np.float32),
@@ -48,15 +41,6 @@ class Bilder:
         self.z_cuda[0,:,0,0].copy_(torch.from_numpy(z))
         x_hat = self.netGx(z_cuda).detach()
         x_hat_nump = x_hat[0,0,].cpu().numpy().astype(np.float32)
-        if self.deriv_plot:
-            self.deriv_imshow.set_data(abs(self.imshow.get_array()-x_hat_nump))
-        if self.source_plot:
-            temp = array_from_bild(x_hat.cpu(),self.pix_pos)
-            self.raw[:] = (np.arctan(temp.T)*self.std_thresh+self.mu).T*1e-6
-            self.stc = mne.minimum_norm.apply_inverse_raw(self.raw,self.inv,3)
-            self.stc_plot.remove_data()
-            self.stc_plot.add_data(getattr(self.stc, "lh"+"_data"),hemi="lh",vertices=self.stc.vertices[0],smoothing_steps=8)
-            self.stc_plot.add_data(getattr(self.stc, "rh"+"_data"),hemi="rh",vertices=self.stc.vertices[1],smoothing_steps=8)
         plt.sca(self.axis)
         self.imshow.set_data(x_hat_nump)
 
@@ -125,26 +109,29 @@ class DragBars:
         "key_press_event", self.on_key)
 
 
-z_num = 24
-net_dir = "/home/jeff/deepeeg/all_b712_z{}_res/".format(z_num)
-netGxFile = net_dir+"netGx_epoch_0_4.pth"
-vecfile = net_dir+"93_A_hand_5ms_ica-raw.fif_Z"
-deriv_plot = False
-source_plot = True
+z_num = 32
+res = (64,64)
+time_res = 128
+ratio = 5/3
+r,c = rowcol_nums(ratio,time_res)
+bigres = (res[0]*r,res[1]*c)
+buffer = np.zeros(bigres)
+net_dir = "/home/jeff/deepeeg/prog3d_500ms/"
+netGxFile = net_dir+"netGx_0_6.pth"
 
-z_cuda = torch.FloatTensor(1,z_num,1,1).cuda()
+z_cuda = torch.FloatTensor(1,z_num,1,1).cuda().half()
 netGx = models.Generator(chan_num=z_num)
 netGx.load_state_dict(torch.load(netGxFile))
-netGx = network_to_half(netGx)
 netGx.cuda()
-netGx.eval()
+netGx.half()
 
-fig, axes = plt.subplots(nrows=1,ncols=2)
+bars_fig, bars_axes = plt.subplots(nrows=1,ncols=1)
+img_fig, img_axes = plt.subplots(nrows=1,ncols=1)
 plt.sca(axes[0])
 plt.axis("off")
 fig.canvas.draw()
 backgrounds = [fig.canvas.copy_from_bbox(ax.bbox) for ax in axes]
-z = np.random.normal(loc=0,scale=1,size=z_num)
+z = norm_vec(np.random.normal(loc=0,scale=1,size=z_num))
 plt.sca(axes[1])
 barplot = plt.bar(np.array(range(len(z))),z,color="blue")
 plt.ylim((-3,3))
