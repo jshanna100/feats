@@ -8,6 +8,23 @@ from deepeeg.DataManage import EEGVolumeDataSet as EEGVDS
 import matplotlib.pyplot as plt
 plt.ion()
 
+def sph2cart(sph,radius=1):
+    if len(sph)<4:
+        raise ValueError("Intended for hyperspheres only.")
+    cartvec = np.zeros(len(sph)+1)
+    for sph_idx in range(len(sph)):
+        to_prod = np.zeros(sph_idx+1)
+        for to_sin in range(sph_idx):
+            to_prod[to_sin] = np.sin(sph[to_sin])
+        to_prod[sph_idx] = np.cos(sph[sph_idx])
+        cartvec[sph_idx] = radius * np.prod(to_prod)
+    to_prod = np.zeros(sph_idx+1)
+    for to_sin in range(len(sph)):
+        to_prod[to_sin] = np.sin(sph[to_sin])
+    cartvec[-1] = radius * np.prod(to_prod)
+    return cartvec
+
+
 def rowcol_nums(ratio,number):
     # find the row column ratio for a given number of subplots
     a = np.array([[1,1],[1,-1]])
@@ -23,19 +40,16 @@ def array_from_bild(batch,pix_pos):
         arr[p_idx,:] = batch[:,0,p[0],p[1]].numpy()
     return arr
 
-def norm_vec(vec,dim=1):
-    return vec/np.linalg.norm(vec,axis=dim)
-
 class Bilder:
-    def __init__(self,rects,z_cuda,netGx,axis,background):
+    def __init__(self,rects,buffer,z_cuda,netGx,axis,background):
         self.rects = rects
-        self.z_cuda = z_cuda
         self.netGx = netGx
         self.axis = axis
-        x_hat = netGx(z_cuda).detach()
+        self.buffer = buffer
         plt.sca(self.axis)
-        self.imshow = plt.imshow(x_hat[0,0,].cpu().numpy().astype(np.float32),
-        vmin=-1,vmax=1)
+        self.imshow = plt.imshow(buffer)
+
+
     def draw(self):
         z = np.array([r.get_height() for r in self.rects])
         self.z_cuda[0,:,0,0].copy_(torch.from_numpy(z))
@@ -87,7 +101,7 @@ class DragBars:
                 if self.ons[r_idx]: continue
                 self.ons[r_idx] = False
                 r.set_color("blue")
-                r.set_height(np.random.normal(loc=0,scale=1))
+                r.set_height(np.random.random()*np.pi
             self.draw()
             self.bilder.draw()
             return
@@ -96,6 +110,8 @@ class DragBars:
         for r_idx,r in enumerate(self.rects):
             if self.ons[r_idx]:
                 r.set_height(r.get_height()+self.incr*direction)
+                if r.get_height() > np.pi:
+                    r.set_height(np.pi)
             else:
                 if not direction:
                     r.set_height(0)
@@ -119,7 +135,7 @@ buffer = np.zeros(bigres)
 net_dir = "/home/jeff/deepeeg/prog3d_500ms/"
 netGxFile = net_dir+"netGx_0_6.pth"
 
-z_cuda = torch.FloatTensor(1,z_num,1,1).cuda().half()
+z_cuda = torch.FloatTensor(1,z_num,1,1,1).cuda().half()
 netGx = models.Generator(chan_num=z_num)
 netGx.load_state_dict(torch.load(netGxFile))
 netGx.cuda()
@@ -127,19 +143,20 @@ netGx.half()
 
 bars_fig, bars_axes = plt.subplots(nrows=1,ncols=1)
 img_fig, img_axes = plt.subplots(nrows=1,ncols=1)
+
 plt.sca(axes[0])
 plt.axis("off")
 fig.canvas.draw()
 backgrounds = [fig.canvas.copy_from_bbox(ax.bbox) for ax in axes]
-z = norm_vec(np.random.normal(loc=0,scale=1,size=z_num))
+z = np.random.random(size=z_num-1)*np.pi
 plt.sca(axes[1])
 barplot = plt.bar(np.array(range(len(z))),z,color="blue")
 plt.ylim((-3,3))
 if deriv_plot:
     deriv_fig = plt.figure()
     plt.axis("off")
-bilder = Bilder(barplot.patches,z_cuda,netGx,axes[0],backgrounds[0],deriv_plot=deriv_plot,source_plot=source_plot)
+bilder = Bilder(barplot.patches,z_cuda,netGx,axes[0],backgrounds[0])
 bilder.draw()
-db = DragBars(barplot.patches,[str(x) for x in list(range(z_num))],
+db = DragBars(barplot.patches,[str(x) for x in list(range(z_num-1))],
 bilder,axes[1],backgrounds[1])
 db.connect()
